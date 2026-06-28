@@ -1,0 +1,21 @@
+plugins {
+    id "com.android.application"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+android {
+    namespace "com.novapulse.mp3"
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "com.novapulse.mp3"
+        minSdkVersion flutter.minSdkVersion
+        targetSdk 35
+        versionCode 1
+        versionName "1.0"
+    }
+}
+
+flutter {
+    source "../.."
+}

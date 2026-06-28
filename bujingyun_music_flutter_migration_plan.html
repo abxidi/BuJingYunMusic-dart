@@ -1,0 +1,798 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>步惊云音乐 Android 到 Flutter/Dart 迁移方案</title>
+  <style>
+    :root {
+      --bg: #f7f8fb;
+      --paper: #ffffff;
+      --ink: #18202f;
+      --muted: #647087;
+      --line: #dce2ec;
+      --accent: #0f7b8a;
+      --accent-2: #b03a63;
+      --green: #15803d;
+      --amber: #a16207;
+      --red: #b42318;
+      --code: #101827;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      line-height: 1.65;
+    }
+
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 32px 24px 56px;
+    }
+
+    header {
+      padding: 34px 36px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 16px 40px rgba(19, 30, 49, 0.07);
+    }
+
+    h1, h2, h3 {
+      line-height: 1.25;
+      margin: 0;
+    }
+
+    h1 {
+      font-size: clamp(30px, 4vw, 48px);
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin-top: 34px;
+      font-size: 25px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 10px;
+    }
+
+    h3 {
+      margin-top: 24px;
+      font-size: 19px;
+    }
+
+    p { margin: 12px 0; }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .subtitle {
+      max-width: 880px;
+      color: var(--muted);
+      font-size: 17px;
+      margin-top: 14px;
+    }
+
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .meta div,
+    section,
+    .note,
+    .decision,
+    .phase,
+    .risk {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .meta div { padding: 12px 14px; }
+
+    .label {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .value {
+      display: block;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+
+    section {
+      margin-top: 22px;
+      padding: 26px 30px;
+    }
+
+    ul, ol { padding-left: 22px; }
+    li { margin: 7px 0; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 14px;
+    }
+
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th {
+      background: #eef3f8;
+      color: #263248;
+      font-weight: 700;
+    }
+
+    code {
+      background: #eef2f7;
+      padding: 2px 6px;
+      border-radius: 5px;
+      color: var(--code);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .92em;
+    }
+
+    pre {
+      overflow: auto;
+      padding: 18px;
+      border-radius: 8px;
+      background: #101827;
+      color: #edf4ff;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 14px;
+      margin-top: 16px;
+    }
+
+    .decision,
+    .note,
+    .phase,
+    .risk {
+      padding: 16px;
+    }
+
+    .decision strong,
+    .phase strong,
+    .risk strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #e7f4f6;
+      color: #095c67;
+      font-size: 12px;
+      font-weight: 700;
+      margin-right: 6px;
+      margin-bottom: 6px;
+    }
+
+    .tag.red { background: #fdecec; color: var(--red); }
+    .tag.amber { background: #fff4d6; color: var(--amber); }
+    .tag.green { background: #e9f7ee; color: var(--green); }
+    .tag.pink { background: #f9e8ef; color: var(--accent-2); }
+
+    .screens {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+      margin-top: 16px;
+    }
+
+    figure {
+      margin: 0;
+      background: #101827;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #263248;
+    }
+
+    figure img {
+      display: block;
+      width: 100%;
+      aspect-ratio: 9 / 16;
+      object-fit: cover;
+      background: #0a0f18;
+    }
+
+    figcaption {
+      padding: 9px 12px;
+      color: #edf4ff;
+      font-size: 13px;
+    }
+
+    .timeline {
+      counter-reset: phase;
+      display: grid;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .phase {
+      position: relative;
+      padding-left: 54px;
+    }
+
+    .phase::before {
+      counter-increment: phase;
+      content: counter(phase);
+      position: absolute;
+      left: 16px;
+      top: 17px;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: white;
+      text-align: center;
+      line-height: 26px;
+      font-weight: 800;
+    }
+
+    .small { color: var(--muted); font-size: 13px; }
+
+    .print-note {
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media print {
+      body { background: white; }
+      main { max-width: none; padding: 0; }
+      header, section { box-shadow: none; break-inside: avoid; }
+      a { color: inherit; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>步惊云音乐 Android 到 Flutter/Dart 迁移方案</h1>
+      <p class="subtitle">
+        目标是将当前原生 Android 本地音乐播放器迁移为 Flutter/Dart 跨平台应用，在保留 Android 现有能力的同时，为 iOS、macOS 和后续更多平台预留清晰边界。
+      </p>
+      <div class="meta">
+        <div>
+          <span class="label">源工程</span>
+          <span class="value"><code>/Users/liutengfei24/workspace/ai_idea/BuJingYunMusic</code></span>
+        </div>
+        <div>
+          <span class="label">目标工作区</span>
+          <span class="value"><code>/Users/liutengfei24/workspace/ai_idea/dart</code></span>
+        </div>
+        <div>
+          <span class="label">方案日期</span>
+          <span class="value">2026-06-19</span>
+        </div>
+        <div>
+          <span class="label">建议技术栈</span>
+          <span class="value">Flutter 3 / Dart / Riverpod / just_audio</span>
+        </div>
+      </div>
+      <p class="print-note">本文档可直接浏览，也可用浏览器打印为 PDF。</p>
+    </header>
+
+    <section>
+      <h2>结论</h2>
+      <p>
+        建议采用“新建 Flutter 工程 + 逐功能重建 + 原 Android 逻辑作为行为规格”的迁移方式，而不是把 Java 代码逐行翻译成 Dart。现有工程核心集中在一个 1672 行的 <code>MainActivity.java</code> 中，播放、扫描、收藏、队列、媒体会话、UI 动效耦合较重。直接翻译会把这些耦合带到 Flutter，后续迁 iOS 会继续受阻。
+      </p>
+      <div class="grid">
+        <div class="decision">
+          <strong>第一优先级：跨平台播放内核</strong>
+          用 <code>just_audio</code> 管播放与队列，用 <code>audio_service</code> 对接后台播放、通知、锁屏和耳机控制，用 <code>audio_session</code> 统一音频焦点与中断处理。
+        </div>
+        <div class="decision">
+          <strong>第二优先级：媒体库与目录访问抽象</strong>
+          Android 保留 MediaStore/SAF 能力；iOS 使用系统媒体库权限和文件选择。把平台差异收敛在 repository/plugin 层，UI 和播放状态不直接碰平台 API。
+        </div>
+        <div class="decision">
+          <strong>第三优先级：复刻视觉，不复刻 XML</strong>
+          Android XML drawable 和自定义 View 应迁移为 Flutter 主题 token、CustomPainter、AnimationController 和组件，而不是资源一比一搬运。
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>现状盘点</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>模块</th>
+            <th>当前实现</th>
+            <th>迁移判断</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>播放</td>
+            <td><code>MediaPlayer</code>、<code>AudioManager</code>、<code>MediaSession</code> 均在 <code>MainActivity</code> 内处理。</td>
+            <td>重建为独立 <code>AudioHandler</code>，避免 UI 生命周期释放播放器。</td>
+          </tr>
+          <tr>
+            <td>后台播放</td>
+            <td><code>PlaybackService</code> 只负责前台通知，播放状态仍由 Activity 控制。</td>
+            <td>Flutter 版应让后台服务成为播放入口，UI 只订阅状态。</td>
+          </tr>
+          <tr>
+            <td>媒体扫描</td>
+            <td>系统曲库走 <code>MediaStore</code>，目录选择走 <code>ACTION_OPEN_DOCUMENT_TREE</code> 和 <code>DocumentsContract</code> 递归。</td>
+            <td>做 <code>MusicLibraryRepository</code> 抽象，Android/iOS 分平台实现。</td>
+          </tr>
+          <tr>
+            <td>收藏</td>
+            <td><code>SharedPreferences</code> 保存 favorite key，包含 v2 key 和 legacy uri key 兼容。</td>
+            <td>可迁为 <code>shared_preferences</code> 或轻量数据库，保留 key 兼容策略。</td>
+          </tr>
+          <tr>
+            <td>播放队列</td>
+            <td>全部歌曲、收藏队列、随机、列表循环、单曲循环在 Activity 内维护。</td>
+            <td>抽成 <code>PlaybackQueueController</code>，单元测试覆盖切歌规则。</td>
+          </tr>
+          <tr>
+            <td>视觉</td>
+            <td>三套样式：霓虹、波纹、雷达；自定义 <code>ThemeVisualizerView</code> 绘制波纹和雷达。</td>
+            <td>Flutter 用 <code>CustomPainter</code> 和动画控制器复刻，视觉资源只作参考。</td>
+          </tr>
+          <tr>
+            <td>工程结构</td>
+            <td>原生 Java 单模块；目标 <code>dart</code> 目录当前为空。</td>
+            <td>适合从干净 Flutter 项目开始建立正确分层。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="screens">
+        <figure>
+          <img src="../BuJingYunMusic/android-design/霓虹.jpg" alt="霓虹样式预览">
+          <figcaption>霓虹：默认全屏播放器视觉</figcaption>
+        </figure>
+        <figure>
+          <img src="../BuJingYunMusic/android-design/波纹.jpg" alt="波纹样式预览">
+          <figcaption>波纹：中心扩散点阵视觉</figcaption>
+        </figure>
+        <figure>
+          <img src="../BuJingYunMusic/android-design/雷达.jpg" alt="雷达样式预览">
+          <figcaption>雷达：扫描光束与音符目标</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section>
+      <h2>目标架构</h2>
+      <p>
+        Flutter 工程建议按 feature-first + 明确平台边界组织。播放器是产品核心，应作为应用级服务初始化；媒体库、偏好设置和可视化分别独立，避免一个页面承载全部逻辑。
+      </p>
+
+      <pre><code>lib/
+  main.dart
+  app/
+    app.dart
+    router.dart
+    theme/
+      app_colors.dart
+      app_theme.dart
+      player_theme_tokens.dart
+  core/
+    models/song.dart
+    models/playback_mode.dart
+    utils/duration_format.dart
+  features/
+    player/
+      application/audio_handler.dart
+      application/playback_controller.dart
+      presentation/player_screen.dart
+      presentation/widgets/
+    library/
+      data/music_library_repository.dart
+      data/android_media_library_repository.dart
+      data/ios_media_library_repository.dart
+      application/library_controller.dart
+      presentation/library_sheet.dart
+    preferences/
+      data/preferences_store.dart
+      application/favorites_controller.dart
+    visualizer/
+      presentation/classic_disc.dart
+      presentation/galaxy_visualizer.dart
+      presentation/radar_visualizer.dart
+  platform/
+    media_library_channel.dart
+    directory_access_channel.dart
+test/
+  playback_queue_controller_test.dart
+  favorite_key_test.dart
+  duration_format_test.dart</code></pre>
+
+      <h3>核心依赖建议</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>能力</th>
+            <th>建议依赖</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>播放引擎</td>
+            <td><code>just_audio</code></td>
+            <td>支持本地文件、URL、播放列表、seek、loop 和 shuffle。pub.dev 调研时版本为 0.10.5。</td>
+          </tr>
+          <tr>
+            <td>后台播放与系统控制</td>
+            <td><code>audio_service</code></td>
+            <td>统一处理 Android 通知、锁屏、耳机控制、iOS 控制中心和队列回调。pub.dev 调研时版本为 0.18.18。</td>
+          </tr>
+          <tr>
+            <td>音频焦点/中断</td>
+            <td><code>audio_session</code></td>
+            <td>配置音乐播放会话，监听来电、导航、耳机拔出等中断。pub.dev 调研时版本为 0.2.3。</td>
+          </tr>
+          <tr>
+            <td>系统媒体库</td>
+            <td><code>on_audio_query</code> + 平台适配层</td>
+            <td>可查询音频、专辑、艺术家、封面，并提供 Android/iOS 支持矩阵；仍需实机验证 iOS 媒体库权限与 URI 播放链路。</td>
+          </tr>
+          <tr>
+            <td>权限</td>
+            <td><code>permission_handler</code></td>
+            <td>Android 13+ 使用 <code>READ_MEDIA_AUDIO</code> 对应的音频权限；避免申请高风险的全盘文件权限。</td>
+          </tr>
+          <tr>
+            <td>目录/文件选择</td>
+            <td><code>file_picker</code> 或自研平台通道</td>
+            <td><code>file_picker</code> 支持目录选择；如 Android SAF tree URI 需要持久授权和递归读取，建议用平台通道精确控制。</td>
+          </tr>
+          <tr>
+            <td>偏好设置</td>
+            <td><code>shared_preferences</code></td>
+            <td>适合收藏 key、主题、上次目录等轻量数据；后续如果加入歌单和歌词缓存，再升级 SQLite/Drift。</td>
+          </tr>
+          <tr>
+            <td>状态管理</td>
+            <td><code>flutter_riverpod</code></td>
+            <td>将播放状态、曲库状态、收藏状态、主题状态拆成 provider，便于测试和跨页面复用。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>迁移范围</h2>
+      <div class="grid">
+        <div class="note">
+          <span class="tag green">MVP 必做</span>
+          <ul>
+            <li>Flutter 工程初始化，保留 Android 包名 <code>com.novapulse.mp3</code>。</li>
+            <li>扫描系统音频库，展示全部音乐。</li>
+            <li>播放、暂停、上一首、下一首、拖动进度。</li>
+            <li>随机、列表循环、单曲循环。</li>
+            <li>收藏/取消收藏，收藏队列切歌。</li>
+            <li>后台播放通知和系统媒体控制。</li>
+            <li>霓虹主题主界面。</li>
+          </ul>
+        </div>
+        <div class="note">
+          <span class="tag amber">第二阶段</span>
+          <ul>
+            <li>选择目录和递归扫描。</li>
+            <li>波纹、雷达两套 CustomPainter 视觉。</li>
+            <li>专辑封面读取、空状态和错误状态。</li>
+            <li>Android 13+、Android 15+ 权限与前台服务兼容。</li>
+            <li>iOS 媒体库权限、控制中心、后台音频配置。</li>
+          </ul>
+        </div>
+        <div class="note">
+          <span class="tag pink">后续扩展</span>
+          <ul>
+            <li>歌词解析与同步滚动。</li>
+            <li>自定义歌单、最近播放、播放历史。</li>
+            <li>封面颜色提取和主题联动。</li>
+            <li>桌面端文件夹库和拖放导入。</li>
+            <li>在线音乐源或私有云同步。</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>分阶段开发计划</h2>
+      <div class="timeline">
+        <div class="phase">
+          <strong>阶段 0：工程基线与规格冻结（0.5-1 天）</strong>
+          <p>在 <code>dart</code> 目录创建 Flutter 工程，固定包名、应用名、最低 SDK、lint、目录结构和 CI 命令。把原 Android README 中的功能清单转为验收清单。</p>
+          <p class="small">验收：<code>flutter analyze</code>、空 App 可运行；文档记录 Android 现有行为和迁移优先级。</p>
+        </div>
+
+        <div class="phase">
+          <strong>阶段 1：领域模型与播放队列（1-2 天）</strong>
+          <p>定义 <code>Song</code>、<code>PlaybackMode</code>、<code>PlaybackQueueState</code>，迁移收藏 key 规则、格式化工具和切歌算法。先用 mock 曲库完成单元测试。</p>
+          <p class="small">验收：随机、循环、单曲循环、收藏队列、取消收藏后的队列刷新均有单元测试。</p>
+        </div>
+
+        <div class="phase">
+          <strong>阶段 2：播放服务 MVP（2-4 天）</strong>
+          <p>接入 <code>just_audio</code>、<code>audio_service</code> 和 <code>audio_session</code>。实现播放、暂停、seek、上一首、下一首、后台通知、耳机/锁屏控制、播放状态流。</p>
+          <p class="small">验收：Android 真机锁屏可控制；来电或其他 App 抢占音频时可暂停/恢复；Activity 重建不丢播放状态。</p>
+        </div>
+
+        <div class="phase">
+          <strong>阶段 3：曲库扫描 MVP（2-3 天）</strong>
+          <p>先实现系统媒体库读取。Android 可通过 <code>on_audio_query</code> 或平台通道查询 MediaStore；iOS 评估 <code>on_audio_query</code> 的 MPMediaQuery 链路。保留扫描数量上限和错误提示。</p>
+          <p class="small">验收：授权流程完整；能读取标题、艺术家、时长、大小或可用替代字段；无权限时展示可恢复状态。</p>
+        </div>
+
+        <div class="phase">
+          <strong>阶段 4：播放器 UI 与霓虹主题（3-5 天）</strong>
+          <p>实现 Flutter 主界面、进度条、底部控制区、设置面板、歌单面板、收藏按钮和霓虹唱片动画。使用 Material/Cupertino 适配安全区，不直接搬 XML 布局。</p>
+          <p class="small">验收：常见 Android/iPhone 尺寸无溢出；播放时动画流畅；歌单和设置面板交互完整。</p>
+        </div>
+
+        <div class="phase">
+          <strong>阶段 5：收藏、主题与本地偏好（1-2 天）</strong>
+          <p>接入 <code>shared_preferences</code>，保存收藏 key、主题、上次目录、上次播放模式。保留原 Android 的 v2 favorite key，必要时兼容 legacy URI key。</p>
+          <p class="small">验收：重启后收藏和主题不丢；老 key 可迁移；收藏列表播放仍优先在收藏队列中切换。</p>
+        </div>
+
+        <div class="phase">
+          <strong>阶段 6：目录选择与递归扫描（2-5 天）</strong>
+          <p>评估 <code>file_picker.getDirectoryPath()</code> 是否满足 Android/iOS 真实目录访问。如果需要 Android SAF tree URI 持久授权和递归 DocumentFile 读取，则补一个小型平台通道。</p>
+          <p class="small">验收：选择目录后能递归识别 mp3、m4a、aac、wav、flac、ogg、opus 等格式；目录权限重启后仍可用。</p>
+        </div>
+
+        <div class="phase">
+          <strong>阶段 7：波纹/雷达视觉迁移（2-4 天）</strong>
+          <p>把 <code>ThemeVisualizerView</code> 的波纹点阵和雷达扫描迁成两个 <code>CustomPainter</code>。动画状态由播放状态驱动，非播放时降频，减少电量消耗。</p>
+          <p class="small">验收：三套主题可切换；低端 Android 设备 60fps 接近稳定；iOS 渲染无明显卡顿。</p>
+        </div>
+
+        <div class="phase">
+          <strong>阶段 8：iOS 适配与发布准备（3-6 天）</strong>
+          <p>补齐 <code>Info.plist</code> 的媒体库用途说明、后台音频能力、控制中心行为和权限文案。检查 App Store 对本地媒体访问和后台播放的审核风险。</p>
+          <p class="small">验收：iPhone 真机可授权、播放、后台控制、锁屏控制；无权限路径有清晰提示。</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>关键任务拆解</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>任务</th>
+            <th>验收标准</th>
+            <th>依赖</th>
+            <th>规模</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>建立 Flutter 工程骨架</td>
+            <td>工程可运行，目录结构、lint、基础 theme、包名和 App 名完成。</td>
+            <td>无</td>
+            <td>S</td>
+          </tr>
+          <tr>
+            <td>播放队列纯 Dart 实现</td>
+            <td>随机/循环/单曲循环与收藏队列行为和原 Android 一致。</td>
+            <td>工程骨架</td>
+            <td>M</td>
+          </tr>
+          <tr>
+            <td>AudioHandler 接入</td>
+            <td>UI 可通过统一控制器发起 play/pause/seek/skip；后台通知可用。</td>
+            <td>队列模型</td>
+            <td>M</td>
+          </tr>
+          <tr>
+            <td>Android 媒体库读取</td>
+            <td>Android 13+ 权限正确；可读取至少标题、URI、时长、艺术家。</td>
+            <td>权限和 repository 抽象</td>
+            <td>M</td>
+          </tr>
+          <tr>
+            <td>播放器主界面</td>
+            <td>主屏展示歌曲、进度、控制按钮、收藏按钮，状态实时同步。</td>
+            <td>AudioHandler、曲库 mock 或真实数据</td>
+            <td>M</td>
+          </tr>
+          <tr>
+            <td>歌单/设置面板</td>
+            <td>全部音乐和收藏音乐可切换，可从任一列表开始播放。</td>
+            <td>主界面、收藏状态</td>
+            <td>M</td>
+          </tr>
+          <tr>
+            <td>持久化与迁移</td>
+            <td>收藏、主题、播放模式重启后保留；老 key 可迁移。</td>
+            <td>Song 模型、收藏控制器</td>
+            <td>S</td>
+          </tr>
+          <tr>
+            <td>目录选择能力验证</td>
+            <td>在 Android/iOS 真机验证目录选择返回值、持久权限和递归读取可行性。</td>
+            <td>曲库 repository</td>
+            <td>M</td>
+          </tr>
+          <tr>
+            <td>CustomPainter 可视化</td>
+            <td>霓虹、波纹、雷达可切换，动画与播放状态一致。</td>
+            <td>主界面、主题状态</td>
+            <td>M</td>
+          </tr>
+          <tr>
+            <td>跨平台回归测试</td>
+            <td>Android 和 iOS 真机覆盖权限、播放、后台、锁屏、收藏、目录读取。</td>
+            <td>全部 MVP 能力</td>
+            <td>M</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>风险与应对</h2>
+      <div class="grid">
+        <div class="risk">
+          <span class="tag red">高风险</span>
+          <strong>iOS 本地音乐访问不等同于 Android 文件扫描</strong>
+          <p>Android 可以通过 MediaStore/SAF 读取本地文件 URI；iOS 更多依赖媒体库权限、文件选择器和安全作用域。不要把“选择任意目录递归扫描”作为 iOS MVP 的强承诺。</p>
+          <p><strong>应对：</strong>先把媒体库读取作为跨平台 MVP；目录递归作为 Android 强能力、iOS 作为文件导入/目录选择实验项。</p>
+        </div>
+        <div class="risk">
+          <span class="tag red">高风险</span>
+          <strong>后台播放生命周期</strong>
+          <p>原工程播放对象在 Activity 内，切后台和进程回收存在天然边界。Flutter 版必须从一开始使用 <code>audio_service</code> 的 handler 模型。</p>
+          <p><strong>应对：</strong>阶段 2 就做后台播放，不等 UI 完成后再补。</p>
+        </div>
+        <div class="risk">
+          <span class="tag amber">中风险</span>
+          <strong>权限与商店审核</strong>
+          <p>Android 13+ 需要使用音频媒体权限；全盘文件权限属于高风险。iOS 需要明确媒体库用途说明。</p>
+          <p><strong>应对：</strong>避免申请 <code>MANAGE_EXTERNAL_STORAGE</code>；权限弹窗文案聚焦“读取本机音频用于本地播放”。</p>
+        </div>
+        <div class="risk">
+          <span class="tag amber">中风险</span>
+          <strong>可视化耗电与掉帧</strong>
+          <p>波纹和雷达当前依赖 Canvas 高频绘制。Flutter 迁移后如果每帧重绘面积过大，会影响低端机。</p>
+          <p><strong>应对：</strong>使用 <code>RepaintBoundary</code>、动画降频、播放暂停状态分离，并用 profile 模式实测。</p>
+        </div>
+        <div class="risk">
+          <span class="tag amber">中风险</span>
+          <strong>依赖插件版本与平台差异</strong>
+          <p>音频插件通常涉及 Android ExoPlayer、iOS AVFoundation、后台服务和权限配置，升级时容易出现平台侧冲突。</p>
+          <p><strong>应对：</strong>锁定版本，建立 Android/iOS 真机 smoke test；每次升级插件单独验证。</p>
+        </div>
+        <div class="risk">
+          <span class="tag green">可控</span>
+          <strong>收藏数据迁移</strong>
+          <p>当前收藏 key 规则简单，迁移难度低。</p>
+          <p><strong>应对：</strong>保留 <code>v2|title|duration|size</code> 规则，必要时读取 legacy URI key 做一次性迁移。</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>验收清单</h2>
+      <h3>Android MVP</h3>
+      <ul>
+        <li>首次启动能申请音频权限；拒绝权限时可进入设置或重新请求。</li>
+        <li>系统曲库扫描成功，展示全部音乐列表，按标题稳定排序。</li>
+        <li>播放、暂停、上一首、下一首、seek、播放完成自动切歌均正常。</li>
+        <li>随机、列表循环、单曲循环与原 Android 行为一致。</li>
+        <li>收藏/取消收藏能持久化，收藏列表播放时上一首/下一首限定在收藏队列。</li>
+        <li>锁屏、通知栏、耳机控制可控制播放。</li>
+        <li>来电或其他播放器抢占音频焦点时可暂停，焦点恢复后按策略恢复。</li>
+        <li>三套主题至少完成霓虹，波纹/雷达进入第二阶段也要有可替代占位。</li>
+      </ul>
+
+      <h3>iOS MVP</h3>
+      <ul>
+        <li>能申请媒体库权限，并在拒绝时给出可恢复状态。</li>
+        <li>能播放用户授权可访问的本地音频。</li>
+        <li>后台音频、控制中心和锁屏控制可用。</li>
+        <li>UI 安全区、刘海屏和底部 Home Indicator 适配正常。</li>
+        <li>权限文案和后台播放用途符合审核预期。</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>建议里程碑</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>里程碑</th>
+            <th>产物</th>
+            <th>建议时间</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>M0 工程可运行</td>
+            <td>Flutter 空壳、目录结构、lint、基础主题</td>
+            <td>第 1 天</td>
+          </tr>
+          <tr>
+            <td>M1 播放核心可用</td>
+            <td>mock 列表播放、队列切歌、后台通知、系统控制</td>
+            <td>第 3-5 天</td>
+          </tr>
+          <tr>
+            <td>M2 Android 曲库可用</td>
+            <td>权限、MediaStore/插件查询、真实音频播放</td>
+            <td>第 6-8 天</td>
+          </tr>
+          <tr>
+            <td>M3 UI MVP</td>
+            <td>霓虹播放器、歌单、设置、收藏、进度条</td>
+            <td>第 9-13 天</td>
+          </tr>
+          <tr>
+            <td>M4 跨平台验证</td>
+            <td>iOS 授权与播放链路、后台音频、基础 UI 适配</td>
+            <td>第 14-18 天</td>
+          </tr>
+          <tr>
+            <td>M5 视觉补全</td>
+            <td>波纹/雷达 CustomPainter、性能优化、回归测试</td>
+            <td>第 19-24 天</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="small">时间估算按单人开发、已有 Flutter 环境、Android/iOS 真机可用计算。若要同时做商店发布、图标、隐私政策和 TestFlight/内测分发，需要另加 2-4 天。</p>
+    </section>
+
+    <section>
+      <h2>下一步执行建议</h2>
+      <ol>
+        <li>在 <code>/Users/liutengfei24/workspace/ai_idea/dart</code> 初始化 Flutter 工程，应用名使用“步惊云音乐”，包名沿用 <code>com.novapulse.mp3</code>。</li>
+        <li>先实现纯 Dart 的 <code>Song</code>、收藏 key、播放队列和切歌规则测试，避免后续 UI 与平台插件干扰核心逻辑。</li>
+        <li>随后接入 <code>audio_service</code> + <code>just_audio</code>，用 mock URI 或测试音频验证后台播放。</li>
+        <li>Android 曲库读取完成后再迁 UI，确保界面连的是真实数据和真实播放器状态。</li>
+        <li>iOS 适配不要等所有视觉完成后再做；最迟在 M3 后立即验证媒体库授权和后台音频。</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>参考资料</h2>
+      <ul>
+        <li><a href="https://pub.dev/packages/just_audio">just_audio - pub.dev</a>：Flutter 音频播放、播放列表、loop、shuffle、seek。</li>
+        <li><a href="https://pub.dev/packages/audio_service">audio_service - pub.dev</a>：后台播放、通知、锁屏、耳机、Android Auto / Apple CarPlay 相关能力。</li>
+        <li><a href="https://pub.dev/packages/audio_session">audio_session - pub.dev</a>：iOS/Android 音频会话、焦点与中断处理。</li>
+        <li><a href="https://pub.dev/packages/on_audio_query">on_audio_query - pub.dev</a>：设备音频、专辑、艺术家、封面与平台支持矩阵。</li>
+        <li><a href="https://pub.dev/packages/permission_handler">permission_handler - pub.dev</a>：跨平台权限请求，包含 Android 13+ 媒体权限说明。</li>
+        <li><a href="https://pub.dev/packages/file_picker">file_picker - pub.dev</a>：文件和目录选择能力及平台支持矩阵。</li>
+        <li><a href="https://docs.flutter.dev/platform-integration/platform-channels">Flutter Platform Channels</a>：需要精确访问 Android SAF 或 iOS 原生 API 时的扩展方式。</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
