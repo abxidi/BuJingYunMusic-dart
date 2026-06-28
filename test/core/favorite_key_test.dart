@@ -15,7 +15,8 @@ void main() {
     expect(favoriteKey(song), 'v2|星际漫游.mp3|03:48|8.6 mb');
   });
 
-  test('legacy favorite key uses uri when present and title meta otherwise', () {
+  test('legacy favorite key uses uri when present and title meta otherwise',
+      () {
     const withUri = Song(
       title: '星际漫游.mp3',
       meta: '手机存储 / Music / Synthwave',

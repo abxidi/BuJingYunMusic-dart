@@ -2,8 +2,11 @@ package com.novapulse.mp3;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.PendingIntent;
+import android.app.RecoverableSecurityException;
 import android.content.ContentUris;
 import android.content.Intent;
+import android.content.IntentSender;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.media.MediaMetadataRetriever;
@@ -32,6 +35,7 @@ public class MainActivity extends AudioServiceActivity {
     private static final String CHANNEL_NAME = "com.novapulse.mp3/music_library";
     private static final int REQUEST_AUDIO_PERMISSION = 1001;
     private static final int REQUEST_FOLDER = 1002;
+    private static final int REQUEST_DELETE = 1003;
     private static final int MAX_AUDIO_STORE_SCAN_COUNT = 300;
     private static final int MAX_TREE_SCAN_COUNT = 500;
     private static final int MAX_TREE_SCAN_DEPTH = 16;
@@ -59,6 +63,8 @@ public class MainActivity extends AudioServiceActivity {
     private MethodChannel.Result pendingAudioStoreResult;
     @Nullable
     private MethodChannel.Result pendingFolderResult;
+    @Nullable
+    private MethodChannel.Result pendingDeleteResult;
 
     @Override
     public void configureFlutterEngine(@NonNull FlutterEngine flutterEngine) {
@@ -77,6 +83,9 @@ public class MainActivity extends AudioServiceActivity {
                 break;
             case "pickAndScanFolder":
                 pickAndScanFolder(result);
+                break;
+            case "deleteSong":
+                deleteSong(call, result);
                 break;
             default:
                 result.notImplemented();
@@ -124,36 +133,112 @@ public class MainActivity extends AudioServiceActivity {
             return;
         }
         pendingFolderResult = result;
-        startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), REQUEST_FOLDER);
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+        startActivityForResult(intent, REQUEST_FOLDER);
     }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != REQUEST_FOLDER) {
+        if (requestCode == REQUEST_FOLDER) {
+            MethodChannel.Result result = pendingFolderResult;
+            pendingFolderResult = null;
+            Uri treeUri = data == null ? null : data.getData();
+            if (result == null) {
+                return;
+            }
+            if (resultCode != Activity.RESULT_OK || treeUri == null) {
+                result.success(new ArrayList<Map<String, String>>());
+                return;
+            }
+
+            int flags = data.getFlags() & (
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            );
+            try {
+                getContentResolver().takePersistableUriPermission(treeUri, flags);
+                result.success(scanSelectedFolder(treeUri));
+            } catch (RuntimeException error) {
+                result.error("folder_scan_failed", "无法读取所选目录", null);
+            }
             return;
         }
 
-        MethodChannel.Result result = pendingFolderResult;
-        pendingFolderResult = null;
-        Uri treeUri = data == null ? null : data.getData();
-        if (result == null) {
+        if (requestCode == REQUEST_DELETE) {
+            MethodChannel.Result result = pendingDeleteResult;
+            pendingDeleteResult = null;
+            if (result == null) {
+                return;
+            }
+            result.success(resultCode == Activity.RESULT_OK);
+        }
+    }
+
+    private void deleteSong(@NonNull MethodCall call, @NonNull MethodChannel.Result result) {
+        String uriValue = call.argument("uri");
+        if (isBlank(uriValue)) {
+            result.error("delete_missing_uri", "缺少歌曲 URI", null);
             return;
         }
-        if (resultCode != Activity.RESULT_OK || treeUri == null) {
-            result.success(new ArrayList<Map<String, String>>());
+        if (pendingDeleteResult != null) {
+            result.error("delete_busy", "已有删除授权流程正在进行", null);
             return;
         }
 
-        int flags = data.getFlags() & (
-                Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-        );
+        Uri uri = Uri.parse(uriValue);
         try {
-            getContentResolver().takePersistableUriPermission(treeUri, flags);
-            result.success(scanSelectedFolder(treeUri));
+            result.success(deleteUri(uri));
+        } catch (RecoverableSecurityException error) {
+            startRecoverableDelete(error.getUserAction().getActionIntent(), result);
+        } catch (SecurityException error) {
+            if (Build.VERSION.SDK_INT >= 30 && isMediaStoreUri(uri)) {
+                PendingIntent pendingIntent = MediaStore.createDeleteRequest(
+                        getContentResolver(),
+                        Arrays.asList(uri)
+                );
+                startRecoverableDelete(pendingIntent, result);
+            } else {
+                result.error("delete_permission_denied", "需要删除授权", null);
+            }
         } catch (RuntimeException error) {
-            result.error("folder_scan_failed", "无法读取所选目录", null);
+            result.error("delete_failed", "删除失败", null);
         }
+    }
+
+    private boolean deleteUri(@NonNull Uri uri) {
+        if (DocumentsContract.isDocumentUri(this, uri)) {
+            return DocumentsContract.deleteDocument(getContentResolver(), uri);
+        }
+        return getContentResolver().delete(uri, null, null) > 0;
+    }
+
+    private void startRecoverableDelete(
+            @NonNull PendingIntent pendingIntent,
+            @NonNull MethodChannel.Result result
+    ) {
+        pendingDeleteResult = result;
+        try {
+            startIntentSenderForResult(
+                    pendingIntent.getIntentSender(),
+                    REQUEST_DELETE,
+                    null,
+                    0,
+                    0,
+                    0
+            );
+        } catch (IntentSender.SendIntentException error) {
+            pendingDeleteResult = null;
+            result.error("delete_intent_failed", "无法发起删除授权", null);
+        }
+    }
+
+    private boolean isMediaStoreUri(@NonNull Uri uri) {
+        String authority = uri.getAuthority();
+        return authority != null && authority.startsWith("media");
     }
 
     private List<Map<String, String>> scanAudioStore() {

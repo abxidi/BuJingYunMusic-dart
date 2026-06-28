@@ -6,7 +6,8 @@ import 'music_library_repository.dart';
 class PlatformMusicLibraryRepository implements MusicLibraryRepository {
   PlatformMusicLibraryRepository({
     MethodChannel? channel,
-  }) : _channel = channel ?? const MethodChannel('com.novapulse.mp3/music_library');
+  }) : _channel =
+            channel ?? const MethodChannel('com.novapulse.mp3/music_library');
 
   final MethodChannel _channel;
 
@@ -18,8 +19,21 @@ class PlatformMusicLibraryRepository implements MusicLibraryRepository {
 
   @override
   Future<List<Song>> pickAndScanFolder() async {
-    final result = await _channel.invokeListMethod<Object?>('pickAndScanFolder');
+    final result =
+        await _channel.invokeListMethod<Object?>('pickAndScanFolder');
     return _songsFromPlatform(result);
+  }
+
+  @override
+  Future<bool> deleteSong(Song song) async {
+    if (!song.playable) {
+      return false;
+    }
+    final result = await _channel.invokeMethod<bool>(
+      'deleteSong',
+      <String, String>{'uri': song.uri!},
+    );
+    return result ?? false;
   }
 
   List<Song> _songsFromPlatform(List<Object?>? result) {

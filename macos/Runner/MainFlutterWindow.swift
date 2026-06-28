@@ -27,12 +27,39 @@ class MainFlutterWindow: NSWindow {
         result(scanDefaultMusicDirectory())
       case "pickAndScanFolder":
         result(pickAndScanFolder(attachedTo: self))
+      case "deleteSong":
+        result(deleteSong(call.arguments))
       default:
         result(FlutterMethodNotImplemented)
       }
     }
 
     super.awakeFromNib()
+  }
+}
+
+private func deleteSong(_ arguments: Any?) -> Bool {
+  guard
+    let values = arguments as? [String: Any],
+    let uri = values["uri"] as? String,
+    let fileURL = URL(string: uri),
+    fileURL.isFileURL
+  else {
+    return false
+  }
+
+  let scoped = fileURL.startAccessingSecurityScopedResource()
+  defer {
+    if scoped {
+      fileURL.stopAccessingSecurityScopedResource()
+    }
+  }
+
+  do {
+    try FileManager.default.removeItem(at: fileURL)
+    return true
+  } catch {
+    return false
   }
 }
 

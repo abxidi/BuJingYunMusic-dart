@@ -52,4 +52,11 @@ class FavoritesController {
     await _store.saveFavoriteKeys(keys);
     return updated;
   }
+
+  Future<void> removeFavorite(Song song) async {
+    final keys = _store.loadFavoriteKeys()
+      ..remove(favoriteKey(song))
+      ..remove(legacyFavoriteKey(song));
+    await _store.saveFavoriteKeys(keys);
+  }
 }

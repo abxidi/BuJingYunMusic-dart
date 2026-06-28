@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:audio_service/audio_service.dart';
@@ -37,6 +38,15 @@ class PlayerScreen extends ConsumerWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(message)),
         );
+      }
+    });
+    ref.listen(libraryControllerProvider, (previous, next) {
+      final finishedScan = previous?.loading == true &&
+          !next.loading &&
+          !next.message.startsWith('已删除') &&
+          next.message != '当前曲库为空';
+      if (finishedScan) {
+        unawaited(playbackController.restoreSelection(next.songs));
       }
     });
 
@@ -95,6 +105,14 @@ class PlayerScreen extends ConsumerWidget {
                             _TrackHeader(
                               song: currentSong,
                               tokens: tokens,
+                              onDelete: currentSong == null
+                                  ? null
+                                  : () => _confirmDeleteCurrentSong(
+                                        context,
+                                        ref,
+                                        currentIndex,
+                                        playing,
+                                      ),
                               onFavorite: currentSong == null
                                   ? null
                                   : () async {
@@ -256,6 +274,59 @@ class PlayerScreen extends ConsumerWidget {
     );
   }
 
+  Future<void> _confirmDeleteCurrentSong(
+    BuildContext context,
+    WidgetRef ref,
+    int currentIndex,
+    bool wasPlaying,
+  ) async {
+    final song = ref.read(libraryControllerProvider).songs[currentIndex];
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        final tokens = PlayerThemeTokens.fromStyle(
+          ref.read(playbackControllerProvider).uiStyle,
+        );
+        return AlertDialog(
+          backgroundColor: tokens.panelStrongFill,
+          title: Text('删除当前歌曲', style: TextStyle(color: tokens.ink)),
+          content: Text(
+            '将从本地目录中彻底删除：\n${song.title}',
+            style: TextStyle(color: tokens.soft),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text('取消', style: TextStyle(color: tokens.muted)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text(
+                '删除',
+                style: TextStyle(color: Color(0xFFFF5D9F)),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
+
+    final deleted = await ref
+        .read(libraryControllerProvider.notifier)
+        .deleteSong(currentIndex);
+    if (!deleted) {
+      return;
+    }
+    await ref.read(playbackControllerProvider.notifier).removeSongAt(
+          deletedIndex: currentIndex,
+          songs: ref.read(libraryControllerProvider).songs,
+          wasPlaying: wasPlaying,
+        );
+  }
+
   Future<void> _showPlaylist(
     BuildContext context,
     WidgetRef ref,
@@ -333,11 +404,13 @@ class _TrackHeader extends StatelessWidget {
   const _TrackHeader({
     required this.song,
     required this.tokens,
+    required this.onDelete,
     required this.onFavorite,
   });
 
   final Song? song;
   final PlayerThemeTokens tokens;
+  final VoidCallback? onDelete;
   final VoidCallback? onFavorite;
 
   @override
@@ -347,6 +420,17 @@ class _TrackHeader extends StatelessWidget {
       child: Stack(
         alignment: Alignment.center,
         children: [
+          Positioned(
+            left: 0,
+            child: _IconControl(
+              tokens: tokens,
+              icon: Icons.delete_outline,
+              iconColor: const Color(0xFFFF7A90),
+              label: '删除当前音乐',
+              onPressed: onDelete,
+              size: 42,
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 52),
             child: Text(

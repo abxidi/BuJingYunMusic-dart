@@ -248,8 +248,16 @@ class RadarPainter extends CustomPainter {
     for (var ring = 1; ring <= 4; ring += 1) {
       canvas.drawCircle(center, radius * ring / 4, paint);
     }
-    canvas.drawLine(center.translate(-radius, 0), center.translate(radius, 0), paint);
-    canvas.drawLine(center.translate(0, -radius), center.translate(0, radius), paint);
+    canvas.drawLine(
+      center.translate(-radius, 0),
+      center.translate(radius, 0),
+      paint,
+    );
+    canvas.drawLine(
+      center.translate(0, -radius),
+      center.translate(0, radius),
+      paint,
+    );
 
     for (var tick = 0; tick < 72; tick += 1) {
       final angle = tick * math.pi / 36;
@@ -292,10 +300,11 @@ class RadarPainter extends CustomPainter {
     for (var index = 0; index < 20; index += 1) {
       final angle = index * 1.721 + phase * (playing ? .7 : .18);
       final noteRadius = radius * (.18 + (index * 37 % 76) / 100);
-      final point = center + Offset(
-        math.cos(angle) * noteRadius,
-        math.sin(angle) * noteRadius,
-      );
+      final point = center +
+          Offset(
+            math.cos(angle) * noteRadius,
+            math.sin(angle) * noteRadius,
+          );
       textPainter.text = TextSpan(
         text: _notes[index % _notes.length],
         style: TextStyle(

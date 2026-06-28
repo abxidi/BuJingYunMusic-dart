@@ -87,6 +87,39 @@ class LibraryController extends StateNotifier<LibraryState> {
     state = state.copyWith(songs: updated);
   }
 
+  Future<bool> deleteSong(int index) async {
+    if (index < 0 || index >= state.songs.length) {
+      return false;
+    }
+    final song = state.songs[index];
+    state = state.copyWith(loading: true, message: '正在删除 ${song.title}');
+    try {
+      final deleted = await _repository.deleteSong(song);
+      if (!deleted) {
+        state = state.copyWith(
+          loading: false,
+          message: '无法删除当前歌曲',
+        );
+        return false;
+      }
+
+      await _favorites.removeFavorite(song);
+      final updated = [...state.songs]..removeAt(index);
+      state = state.copyWith(
+        songs: updated,
+        loading: false,
+        message: updated.isEmpty ? '当前曲库为空' : '已删除 ${song.title}',
+      );
+      return true;
+    } catch (_) {
+      state = state.copyWith(
+        loading: false,
+        message: '删除失败，需要文件写入权限',
+      );
+      return false;
+    }
+  }
+
   List<int> sortedSongIndices({required bool favoritesOnly}) {
     final indices = <int>[];
     for (var index = 0; index < state.songs.length; index += 1) {
