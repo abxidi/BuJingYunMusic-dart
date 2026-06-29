@@ -109,10 +109,27 @@ class PlayerThemeTokens {
     );
   }
 
-  BoxDecoration playDecoration() {
+  BoxDecoration desktopPanelDecoration({bool strong = false}) {
+    final fill = strong ? panelStrongFill : panelFill;
+    return BoxDecoration(
+      color: fill,
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: line.withAlpha(strong ? 220 : 150)),
+    );
+  }
+
+  BoxDecoration desktopControlDecoration({bool active = false}) {
+    return BoxDecoration(
+      color: active ? activeFill : panelFill,
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: active ? accent : line.withAlpha(150)),
+    );
+  }
+
+  BoxDecoration playDecoration({double radius = 24}) {
     return BoxDecoration(
       gradient: LinearGradient(colors: [accent, accentAlt]),
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(radius),
     );
   }
 }

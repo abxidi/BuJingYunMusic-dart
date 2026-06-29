@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 
 import '../../../app/app_providers.dart';
 import '../../../core/models/playback_mode.dart';
@@ -13,7 +14,9 @@ import '../../../core/platform/platform_labels.dart';
 import '../../../core/utils/formatters.dart';
 import '../../visualizer/presentation/visualizer_widgets.dart';
 import '../application/bujingyun_audio_handler.dart';
+import '../application/playback_view_state.dart';
 import '../../library/application/library_state.dart';
+import 'player_layout.dart';
 import 'player_theme.dart';
 
 class PlayerScreen extends ConsumerWidget {
@@ -55,13 +58,55 @@ class PlayerScreen extends ConsumerWidget {
       builder: (context, snapshot) {
         final playbackState = snapshot.data ?? PlaybackState();
         final playing = playbackState.playing;
-        return Scaffold(
+        void openSettings() => _showAdaptiveSettings(context, ref, tokens);
+        void chooseFolder() => unawaited(
+              ref.read(libraryControllerProvider.notifier).pickAndScanFolder(),
+            );
+        void togglePlay() => unawaited(
+              playbackController.togglePlay(songs, playbackState),
+            );
+        void playPrevious() => unawaited(
+              playbackController.playPrevious(songs: songs),
+            );
+        void playNext() => unawaited(
+              playbackController.playNext(manual: true, songs: songs),
+            );
+
+        final player = Scaffold(
           backgroundColor: Colors.transparent,
           body: DecoratedBox(
             decoration: tokens.rootDecoration(),
             child: SafeArea(
               child: LayoutBuilder(
                 builder: (context, constraints) {
+                  final layoutKind = playerLayoutKindFor(
+                    platform: Theme.of(context).platform,
+                    width: constraints.maxWidth,
+                  );
+                  if (layoutKind == PlayerLayoutKind.desktop) {
+                    return _DesktopPlayerLayout(
+                      library: library,
+                      playback: playback,
+                      tokens: tokens,
+                      songs: songs,
+                      currentIndex: currentIndex,
+                      currentSong: currentSong,
+                      playing: playing,
+                      audioHandler: audioHandler,
+                      playbackState: playbackState,
+                      onSettings: openSettings,
+                      onChooseFolder: chooseFolder,
+                      onDeleteCurrent: currentSong == null
+                          ? null
+                          : () => _confirmDeleteCurrentSong(
+                                context,
+                                ref,
+                                currentIndex,
+                                playing,
+                              ),
+                    );
+                  }
+
                   final height = constraints.maxHeight;
                   final compact = height < 650;
                   final visualizerSize = math
@@ -89,8 +134,7 @@ class PlayerScreen extends ConsumerWidget {
                           children: [
                             _TopBar(
                               tokens: tokens,
-                              onSettings: () =>
-                                  _showSettings(context, ref, tokens),
+                              onSettings: openSettings,
                             ),
                             SizedBox(height: topGap),
                             SizedBox.square(
@@ -152,16 +196,9 @@ class PlayerScreen extends ConsumerWidget {
                               mode: playback.mode,
                               playing: playing,
                               onMode: playbackController.switchMode,
-                              onPrevious: () =>
-                                  playbackController.playPrevious(songs: songs),
-                              onPlay: () => playbackController.togglePlay(
-                                songs,
-                                playbackState,
-                              ),
-                              onNext: () => playbackController.playNext(
-                                manual: true,
-                                songs: songs,
-                              ),
+                              onPrevious: playPrevious,
+                              onPlay: togglePlay,
+                              onNext: playNext,
                               onPlaylist: () => _showPlaylist(
                                 context,
                                 ref,
@@ -175,6 +212,123 @@ class PlayerScreen extends ConsumerWidget {
                     ),
                   );
                 },
+              ),
+            ),
+          ),
+        );
+        final commandScope = _PlayerCommandScope(
+          onOpenSettings: openSettings,
+          onChooseFolder: chooseFolder,
+          onTogglePlay: togglePlay,
+          onPrevious: playPrevious,
+          onNext: playNext,
+          child: player,
+        );
+        if (Theme.of(context).platform == TargetPlatform.macOS) {
+          return _PlayerMenuBar(
+            onOpenSettings: openSettings,
+            onChooseFolder: chooseFolder,
+            onTogglePlay: togglePlay,
+            onPrevious: playPrevious,
+            onNext: playNext,
+            child: commandScope,
+          );
+        }
+        return commandScope;
+      },
+    );
+  }
+
+  Future<void> _showAdaptiveSettings(
+    BuildContext context,
+    WidgetRef ref,
+    PlayerThemeTokens tokens,
+  ) {
+    final layoutKind = playerLayoutKindFor(
+      platform: Theme.of(context).platform,
+      width: MediaQuery.sizeOf(context).width,
+    );
+    if (layoutKind == PlayerLayoutKind.desktop) {
+      return _showDesktopSettings(context, ref, tokens);
+    }
+    return _showSettings(context, ref, tokens);
+  }
+
+  Future<void> _showDesktopSettings(
+    BuildContext context,
+    WidgetRef ref,
+    PlayerThemeTokens tokens,
+  ) {
+    final library = ref.read(libraryControllerProvider);
+    final playback = ref.read(playbackControllerProvider);
+    return showDialog<void>(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: DecoratedBox(
+              decoration: tokens.desktopPanelDecoration(strong: true),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '设置',
+                            style: TextStyle(
+                              color: tokens.ink,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        _DesktopIconButton(
+                          tokens: tokens,
+                          icon: Icons.close,
+                          label: '关闭',
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _DesktopFolderSummary(tokens: tokens, library: library),
+                    const SizedBox(height: 16),
+                    _DesktopPrimaryButton(
+                      tokens: tokens,
+                      icon: Icons.folder_open,
+                      label: chooseMusicFolderLabel,
+                      onPressed: () {
+                        Navigator.pop(context);
+                        ref
+                            .read(libraryControllerProvider.notifier)
+                            .pickAndScanFolder();
+                      },
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      'UI 样式',
+                      style: TextStyle(color: tokens.muted, fontSize: 12),
+                    ),
+                    const SizedBox(height: 8),
+                    _DesktopStyleSelector(
+                      tokens: tokens,
+                      playback: playback,
+                      onSelected: (style) => ref
+                          .read(playbackControllerProvider.notifier)
+                          .setUiStyle(style),
+                    ),
+                    const SizedBox(height: 18),
+                    _DesktopSettingStatus(tokens: tokens, label: '启动自动扫描'),
+                    _DesktopSettingStatus(tokens: tokens, label: '默认播放收藏队列'),
+                    _DesktopSettingStatus(tokens: tokens, label: '暗场动态频谱'),
+                  ],
+                ),
               ),
             ),
           ),
@@ -344,6 +498,1065 @@ class PlayerScreen extends ConsumerWidget {
           initialFavorites: favorites,
         );
       },
+    );
+  }
+}
+
+class _TogglePlayIntent extends Intent {
+  const _TogglePlayIntent();
+}
+
+class _PreviousTrackIntent extends Intent {
+  const _PreviousTrackIntent();
+}
+
+class _NextTrackIntent extends Intent {
+  const _NextTrackIntent();
+}
+
+class _ChooseFolderIntent extends Intent {
+  const _ChooseFolderIntent();
+}
+
+class _OpenSettingsIntent extends Intent {
+  const _OpenSettingsIntent();
+}
+
+class _PlayerCommandScope extends StatelessWidget {
+  const _PlayerCommandScope({
+    required this.onOpenSettings,
+    required this.onChooseFolder,
+    required this.onTogglePlay,
+    required this.onPrevious,
+    required this.onNext,
+    required this.child,
+  });
+
+  final VoidCallback onOpenSettings;
+  final VoidCallback onChooseFolder;
+  final VoidCallback onTogglePlay;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Shortcuts(
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.space): _TogglePlayIntent(),
+        SingleActivator(LogicalKeyboardKey.arrowLeft): _PreviousTrackIntent(),
+        SingleActivator(LogicalKeyboardKey.arrowRight): _NextTrackIntent(),
+        SingleActivator(LogicalKeyboardKey.keyO, meta: true):
+            _ChooseFolderIntent(),
+        SingleActivator(LogicalKeyboardKey.comma, meta: true):
+            _OpenSettingsIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          _TogglePlayIntent: CallbackAction<_TogglePlayIntent>(
+            onInvoke: (_) {
+              onTogglePlay();
+              return null;
+            },
+          ),
+          _PreviousTrackIntent: CallbackAction<_PreviousTrackIntent>(
+            onInvoke: (_) {
+              onPrevious();
+              return null;
+            },
+          ),
+          _NextTrackIntent: CallbackAction<_NextTrackIntent>(
+            onInvoke: (_) {
+              onNext();
+              return null;
+            },
+          ),
+          _ChooseFolderIntent: CallbackAction<_ChooseFolderIntent>(
+            onInvoke: (_) {
+              onChooseFolder();
+              return null;
+            },
+          ),
+          _OpenSettingsIntent: CallbackAction<_OpenSettingsIntent>(
+            onInvoke: (_) {
+              onOpenSettings();
+              return null;
+            },
+          ),
+        },
+        child: Focus(
+          autofocus: true,
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+class _PlayerMenuBar extends StatelessWidget {
+  const _PlayerMenuBar({
+    required this.onOpenSettings,
+    required this.onChooseFolder,
+    required this.onTogglePlay,
+    required this.onPrevious,
+    required this.onNext,
+    required this.child,
+  });
+
+  final VoidCallback onOpenSettings;
+  final VoidCallback onChooseFolder;
+  final VoidCallback onTogglePlay;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return PlatformMenuBar(
+      menus: <PlatformMenuItem>[
+        PlatformMenu(
+          label: '文件',
+          menus: <PlatformMenuItem>[
+            PlatformMenuItem(
+              label: '选择音乐目录',
+              shortcut: const SingleActivator(
+                LogicalKeyboardKey.keyO,
+                meta: true,
+              ),
+              onSelected: onChooseFolder,
+            ),
+            PlatformMenuItem(
+              label: '设置',
+              shortcut: const SingleActivator(
+                LogicalKeyboardKey.comma,
+                meta: true,
+              ),
+              onSelected: onOpenSettings,
+            ),
+          ],
+        ),
+        PlatformMenu(
+          label: '播放',
+          menus: <PlatformMenuItem>[
+            PlatformMenuItem(
+              label: '播放 / 暂停',
+              shortcut: const SingleActivator(LogicalKeyboardKey.space),
+              onSelected: onTogglePlay,
+            ),
+            PlatformMenuItem(
+              label: '上一首',
+              shortcut: const SingleActivator(LogicalKeyboardKey.arrowLeft),
+              onSelected: onPrevious,
+            ),
+            PlatformMenuItem(
+              label: '下一首',
+              shortcut: const SingleActivator(LogicalKeyboardKey.arrowRight),
+              onSelected: onNext,
+            ),
+          ],
+        ),
+      ],
+      child: child,
+    );
+  }
+}
+
+class _DesktopPlayerLayout extends ConsumerStatefulWidget {
+  const _DesktopPlayerLayout({
+    required this.library,
+    required this.playback,
+    required this.tokens,
+    required this.songs,
+    required this.currentIndex,
+    required this.currentSong,
+    required this.playing,
+    required this.audioHandler,
+    required this.playbackState,
+    required this.onSettings,
+    required this.onChooseFolder,
+    required this.onDeleteCurrent,
+  });
+
+  final LibraryState library;
+  final PlaybackViewState playback;
+  final PlayerThemeTokens tokens;
+  final List<Song> songs;
+  final int currentIndex;
+  final Song? currentSong;
+  final bool playing;
+  final BujingyunAudioHandler audioHandler;
+  final PlaybackState playbackState;
+  final VoidCallback onSettings;
+  final VoidCallback onChooseFolder;
+  final VoidCallback? onDeleteCurrent;
+
+  @override
+  ConsumerState<_DesktopPlayerLayout> createState() =>
+      _DesktopPlayerLayoutState();
+}
+
+class _DesktopPlayerLayoutState extends ConsumerState<_DesktopPlayerLayout> {
+  bool _favoritesOnly = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final indices = ref
+        .read(libraryControllerProvider.notifier)
+        .sortedSongIndices(favoritesOnly: _favoritesOnly);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 230,
+            child: _DesktopSidebar(
+              library: widget.library,
+              playback: widget.playback,
+              tokens: widget.tokens,
+              onSettings: widget.onSettings,
+              onChooseFolder: widget.onChooseFolder,
+              onScanDefault: () => unawaited(
+                ref.read(libraryControllerProvider.notifier).scanAudioStore(),
+              ),
+              onStyleSelected: (style) => unawaited(
+                ref.read(playbackControllerProvider.notifier).setUiStyle(style),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: _DesktopNowPlaying(
+              tokens: widget.tokens,
+              playback: widget.playback,
+              song: widget.currentSong,
+              playing: widget.playing,
+              audioHandler: widget.audioHandler,
+              onDeleteCurrent: widget.onDeleteCurrent,
+              onFavoriteCurrent: widget.currentSong == null
+                  ? null
+                  : () => _toggleFavorite(widget.currentIndex),
+              onMode: () => unawaited(
+                ref.read(playbackControllerProvider.notifier).switchMode(),
+              ),
+              onPrevious: () => unawaited(
+                ref
+                    .read(playbackControllerProvider.notifier)
+                    .playPrevious(songs: widget.songs),
+              ),
+              onPlay: () => unawaited(
+                ref
+                    .read(playbackControllerProvider.notifier)
+                    .togglePlay(widget.songs, widget.playbackState),
+              ),
+              onNext: () => unawaited(
+                ref.read(playbackControllerProvider.notifier).playNext(
+                      manual: true,
+                      songs: widget.songs,
+                    ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          SizedBox(
+            width: 340,
+            child: _DesktopQueuePanel(
+              tokens: widget.tokens,
+              library: widget.library,
+              playback: widget.playback,
+              indices: indices,
+              favoritesOnly: _favoritesOnly,
+              onToggleFavoritesOnly: (value) =>
+                  setState(() => _favoritesOnly = value),
+              onPlayFirst: indices.isEmpty ? null : () => _playSong(indices[0]),
+              onSelectSong: _playSong,
+              onFavoriteSong: _toggleFavorite,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _playSong(int songIndex) async {
+    final controller = ref.read(playbackControllerProvider.notifier);
+    if (_favoritesOnly) {
+      controller.activateFavoriteQueue(songIndex, widget.library.songs);
+      await controller.selectSong(
+        songIndex,
+        songs: widget.library.songs,
+        start: true,
+        keepQueue: true,
+      );
+      return;
+    }
+    await controller.selectSong(
+      songIndex,
+      songs: widget.library.songs,
+      start: true,
+    );
+  }
+
+  Future<void> _toggleFavorite(int songIndex) async {
+    await ref
+        .read(libraryControllerProvider.notifier)
+        .toggleFavorite(songIndex);
+    ref
+        .read(playbackControllerProvider.notifier)
+        .refreshFavoriteQueue(ref.read(libraryControllerProvider).songs);
+  }
+}
+
+class _DesktopPanel extends StatelessWidget {
+  const _DesktopPanel({
+    required this.tokens,
+    required this.child,
+    this.padding = const EdgeInsets.all(16),
+  });
+
+  final PlayerThemeTokens tokens;
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: tokens.desktopPanelDecoration(),
+      child: Padding(
+        padding: padding,
+        child: child,
+      ),
+    );
+  }
+}
+
+class _DesktopSidebar extends StatelessWidget {
+  const _DesktopSidebar({
+    required this.library,
+    required this.playback,
+    required this.tokens,
+    required this.onSettings,
+    required this.onChooseFolder,
+    required this.onScanDefault,
+    required this.onStyleSelected,
+  });
+
+  final LibraryState library;
+  final PlaybackViewState playback;
+  final PlayerThemeTokens tokens;
+  final VoidCallback onSettings;
+  final VoidCallback onChooseFolder;
+  final VoidCallback onScanDefault;
+  final ValueChanged<UiStyle> onStyleSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return _DesktopPanel(
+      tokens: tokens,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: tokens.desktopControlDecoration(active: true),
+                child: Icon(Icons.graphic_eq, color: tokens.ink, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '步惊云音乐',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: tokens.ink,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          _DesktopFolderSummary(tokens: tokens, library: library),
+          const SizedBox(height: 14),
+          _DesktopPrimaryButton(
+            tokens: tokens,
+            icon: Icons.folder_open,
+            label: chooseMusicFolderLabel,
+            onPressed: onChooseFolder,
+          ),
+          const SizedBox(height: 8),
+          _DesktopSecondaryButton(
+            tokens: tokens,
+            icon: Icons.refresh,
+            label: '重新读取 ~/Music',
+            onPressed: onScanDefault,
+          ),
+          const SizedBox(height: 22),
+          Text(
+            '播放外观',
+            style: TextStyle(color: tokens.muted, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          _DesktopStyleSelector(
+            tokens: tokens,
+            playback: playback,
+            onSelected: onStyleSelected,
+          ),
+          const Spacer(),
+          _DesktopSecondaryButton(
+            tokens: tokens,
+            icon: Icons.tune,
+            label: '设置',
+            onPressed: onSettings,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DesktopNowPlaying extends StatelessWidget {
+  const _DesktopNowPlaying({
+    required this.tokens,
+    required this.playback,
+    required this.song,
+    required this.playing,
+    required this.audioHandler,
+    required this.onDeleteCurrent,
+    required this.onFavoriteCurrent,
+    required this.onMode,
+    required this.onPrevious,
+    required this.onPlay,
+    required this.onNext,
+  });
+
+  final PlayerThemeTokens tokens;
+  final PlaybackViewState playback;
+  final Song? song;
+  final bool playing;
+  final BujingyunAudioHandler audioHandler;
+  final VoidCallback? onDeleteCurrent;
+  final VoidCallback? onFavoriteCurrent;
+  final VoidCallback onMode;
+  final VoidCallback onPrevious;
+  final VoidCallback onPlay;
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    return _DesktopPanel(
+      tokens: tokens,
+      padding: const EdgeInsets.fromLTRB(22, 18, 22, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  playing ? '正在播放' : '已暂停',
+                  style: TextStyle(color: tokens.muted, fontSize: 12),
+                ),
+              ),
+              _DesktopIconButton(
+                tokens: tokens,
+                icon: Icons.delete_outline,
+                iconColor: const Color(0xFFFF7A90),
+                label: '删除当前音乐',
+                onPressed: onDeleteCurrent,
+              ),
+              const SizedBox(width: 8),
+              _DesktopIconButton(
+                tokens: tokens,
+                icon: Icons.favorite,
+                iconColor: song?.favorite == true
+                    ? const Color(0xFFFF5D9F)
+                    : Colors.white,
+                label: '收藏当前音乐',
+                onPressed: onFavoriteCurrent,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox.square(
+                      dimension:
+                          MediaQuery.sizeOf(context).height.clamp(180, 270),
+                      child: ThemeVisualizer(
+                        style: playback.uiStyle,
+                        playing: playing,
+                        tokens: tokens,
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    Text(
+                      song?.title ?? '星际漫游.mp3',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: tokens.ink,
+                        fontSize: 28,
+                        height: 1.08,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      song?.meta ?? '$sampleMusicMetaPrefix / Synthwave',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: tokens.soft, fontSize: 13),
+                    ),
+                    const SizedBox(height: 16),
+                    _MiniBars(playing: playing, tokens: tokens),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          _ProgressRow(tokens: tokens, audioHandler: audioHandler),
+          const SizedBox(height: 16),
+          _DesktopControlStrip(
+            tokens: tokens,
+            mode: playback.mode,
+            playing: playing,
+            onMode: onMode,
+            onPrevious: onPrevious,
+            onPlay: onPlay,
+            onNext: onNext,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DesktopControlStrip extends StatelessWidget {
+  const _DesktopControlStrip({
+    required this.tokens,
+    required this.mode,
+    required this.playing,
+    required this.onMode,
+    required this.onPrevious,
+    required this.onPlay,
+    required this.onNext,
+  });
+
+  final PlayerThemeTokens tokens;
+  final PlaybackMode mode;
+  final bool playing;
+  final VoidCallback onMode;
+  final VoidCallback onPrevious;
+  final VoidCallback onPlay;
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 52,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _DesktopIconButton(
+            tokens: tokens,
+            icon: switch (mode) {
+              PlaybackMode.shuffle => Icons.shuffle,
+              PlaybackMode.repeatAll => Icons.repeat,
+              PlaybackMode.repeatOne => Icons.repeat_one,
+            },
+            label: mode.label,
+            onPressed: onMode,
+            size: 42,
+          ),
+          const SizedBox(width: 18),
+          _DesktopIconButton(
+            tokens: tokens,
+            icon: Icons.skip_previous,
+            label: '上一首',
+            onPressed: onPrevious,
+            size: 44,
+          ),
+          const SizedBox(width: 10),
+          _DesktopIconButton(
+            tokens: tokens,
+            icon: playing ? Icons.pause : Icons.play_arrow,
+            label: playing ? '暂停' : '播放',
+            onPressed: onPlay,
+            size: 52,
+            play: true,
+          ),
+          const SizedBox(width: 10),
+          _DesktopIconButton(
+            tokens: tokens,
+            icon: Icons.skip_next,
+            label: '下一首',
+            onPressed: onNext,
+            size: 44,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DesktopQueuePanel extends StatelessWidget {
+  const _DesktopQueuePanel({
+    required this.tokens,
+    required this.library,
+    required this.playback,
+    required this.indices,
+    required this.favoritesOnly,
+    required this.onToggleFavoritesOnly,
+    required this.onPlayFirst,
+    required this.onSelectSong,
+    required this.onFavoriteSong,
+  });
+
+  final PlayerThemeTokens tokens;
+  final LibraryState library;
+  final PlaybackViewState playback;
+  final List<int> indices;
+  final bool favoritesOnly;
+  final ValueChanged<bool> onToggleFavoritesOnly;
+  final VoidCallback? onPlayFirst;
+  final ValueChanged<int> onSelectSong;
+  final ValueChanged<int> onFavoriteSong;
+
+  @override
+  Widget build(BuildContext context) {
+    return _DesktopPanel(
+      tokens: tokens,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '曲库',
+                  style: TextStyle(
+                    color: tokens.ink,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Text(
+                '${indices.length} 首',
+                style: TextStyle(color: tokens.muted, fontSize: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _DesktopTextChip(
+                  label: '全部',
+                  active: !favoritesOnly,
+                  tokens: tokens,
+                  onTap: () => onToggleFavoritesOnly(false),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _DesktopTextChip(
+                  label: '收藏',
+                  active: favoritesOnly,
+                  tokens: tokens,
+                  onTap: () => onToggleFavoritesOnly(true),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _DesktopPrimaryButton(
+            tokens: tokens,
+            icon: Icons.play_arrow,
+            label: favoritesOnly ? '播放收藏音乐' : '播放全部音乐',
+            onPressed: onPlayFirst,
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: indices.isEmpty
+                ? Center(
+                    child: Text(
+                      favoritesOnly ? '暂无收藏音乐' : library.message,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: tokens.muted),
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: indices.length,
+                    itemBuilder: (context, itemIndex) {
+                      final songIndex = indices[itemIndex];
+                      final song = library.songs[songIndex];
+                      return _DesktopSongRow(
+                        song: song,
+                        active: playback.currentIndex == songIndex,
+                        tokens: tokens,
+                        onTap: () => onSelectSong(songIndex),
+                        onFavorite: () => onFavoriteSong(songIndex),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DesktopSongRow extends StatelessWidget {
+  const _DesktopSongRow({
+    required this.song,
+    required this.active,
+    required this.tokens,
+    required this.onTap,
+    required this.onFavorite,
+  });
+
+  final Song song;
+  final bool active;
+  final PlayerThemeTokens tokens;
+  final VoidCallback onTap;
+  final VoidCallback onFavorite;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          height: 54,
+          padding: const EdgeInsets.fromLTRB(10, 7, 4, 7),
+          decoration: tokens.desktopControlDecoration(active: active),
+          child: Row(
+            children: [
+              Icon(
+                active ? Icons.equalizer : Icons.music_note,
+                color: active ? tokens.accent : tokens.soft,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      song.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: tokens.ink,
+                        fontSize: 13,
+                        fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${song.category} · ${song.duration}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: tokens.muted, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: '收藏',
+                onPressed: onFavorite,
+                icon: Icon(
+                  Icons.favorite,
+                  color: song.favorite ? const Color(0xFFFF5D9F) : tokens.soft,
+                  size: 18,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopFolderSummary extends StatelessWidget {
+  const _DesktopFolderSummary({
+    required this.tokens,
+    required this.library,
+  });
+
+  final PlayerThemeTokens tokens;
+  final LibraryState library;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: tokens.desktopControlDecoration(),
+      child: Row(
+        children: [
+          Icon(Icons.folder, color: tokens.soft, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  library.folderLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: tokens.ink,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  library.message,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: tokens.muted, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DesktopStyleSelector extends StatelessWidget {
+  const _DesktopStyleSelector({
+    required this.tokens,
+    required this.playback,
+    required this.onSelected,
+  });
+
+  final PlayerThemeTokens tokens;
+  final PlaybackViewState playback;
+  final ValueChanged<UiStyle> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: UiStyle.values.map((style) {
+        return Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: _DesktopTextChip(
+              label: style.label,
+              active: playback.uiStyle == style,
+              tokens: tokens,
+              onTap: () => onSelected(style),
+            ),
+          ),
+        );
+      }).toList(growable: false),
+    );
+  }
+}
+
+class _DesktopSettingStatus extends StatelessWidget {
+  const _DesktopSettingStatus({
+    required this.tokens,
+    required this.label,
+  });
+
+  final PlayerThemeTokens tokens;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          Icon(Icons.check_circle, color: tokens.accent, size: 17),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(color: tokens.soft, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DesktopPrimaryButton extends StatelessWidget {
+  const _DesktopPrimaryButton({
+    required this.tokens,
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final PlayerThemeTokens tokens;
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 38,
+      child: DecoratedBox(
+        decoration: tokens.playDecoration(radius: 10),
+        child: TextButton.icon(
+          onPressed: onPressed,
+          icon: Icon(icon, color: const Color(0xFF041218), size: 17),
+          label: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFF041218),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopSecondaryButton extends StatelessWidget {
+  const _DesktopSecondaryButton({
+    required this.tokens,
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final PlayerThemeTokens tokens;
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 38,
+      child: TextButton.icon(
+        style: TextButton.styleFrom(
+          backgroundColor: tokens.panelFill,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(color: tokens.line.withAlpha(179)),
+          ),
+        ),
+        onPressed: onPressed,
+        icon: Icon(icon, color: tokens.soft, size: 17),
+        label: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: tokens.ink, fontWeight: FontWeight.w700),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopTextChip extends StatelessWidget {
+  const _DesktopTextChip({
+    required this.label,
+    required this.active,
+    required this.tokens,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool active;
+  final PlayerThemeTokens tokens;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        height: 34,
+        alignment: Alignment.center,
+        decoration: tokens.desktopControlDecoration(active: active),
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: tokens.ink,
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopIconButton extends StatelessWidget {
+  const _DesktopIconButton({
+    required this.tokens,
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.iconColor,
+    this.size = 36,
+    this.play = false,
+  });
+
+  final PlayerThemeTokens tokens;
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+  final Color? iconColor;
+  final double size;
+  final bool play;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: label,
+      child: DecoratedBox(
+        decoration: play
+            ? tokens.playDecoration(radius: 12)
+            : tokens.desktopControlDecoration(),
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            onPressed: onPressed,
+            icon: Icon(
+              icon,
+              color:
+                  iconColor ?? (play ? const Color(0xFF041218) : Colors.white),
+              size: size >= 50 ? 24 : 19,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
